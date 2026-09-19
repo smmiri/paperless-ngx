@@ -55,7 +55,18 @@ A full list of [features](https://docs.paperless-ngx.com/#features) and [screens
 
 # Getting started
 
-The easiest way to deploy paperless is `docker compose`. The files in the [`/docker/compose` directory](https://github.com/paperless-ngx/paperless-ngx/tree/main/docker/compose) are configured to pull the image from the GitHub container registry.
+This fork compiles and hosts Paperless on a Docker server at
+[`https://paperless.smmiri.com`](https://paperless.smmiri.com) through a
+Cloudflare Tunnel. Use the stack in [`deploy/`](deploy/README.md):
+
+```bash
+cd deploy
+cp .env.example .env   # set secrets and CLOUDFLARE_TUNNEL_TOKEN
+docker compose build
+docker compose up -d
+```
+
+The easiest generic Paperless deploy is still `docker compose`. The files in the [`/docker/compose` directory](https://github.com/paperless-ngx/paperless-ngx/tree/main/docker/compose) are configured to pull the image from the GitHub container registry.
 
 If you'd like to jump right in, you can configure a `docker compose` environment with our install script:
 

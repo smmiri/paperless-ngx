@@ -115,3 +115,11 @@ celerybeat-schedule*
 
 # Git worktree local folder
 .worktrees
+
+# Local smmiri deploy secrets and runtime data
+/deploy/.env
+/deploy/consume/*
+!/deploy/consume/.gitkeep
+/deploy/export/*
+!/deploy/export/.gitkeep
+/deploy/**/*.json
