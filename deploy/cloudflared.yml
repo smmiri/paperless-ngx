@@ -1,0 +1,20 @@
+# Optional locally-managed Cloudflare Tunnel config.
+# Token-based tunnels (CLOUDFLARE_TUNNEL_TOKEN) are preferred.
+#
+# If you switch to a credentials file instead of a token:
+#   1. Place the tunnel credentials JSON next to this file.
+#   2. Set tunnel and credentials-file below.
+#   3. Point the cloudflared service at this file instead of --token.
+#
+# cloudflared resolves "webserver" on the Compose network.
+
+ingress:
+  - hostname: paperless.smmiri.com
+    service: http://webserver:8000
+    originRequest:
+      connectTimeout: 30s
+      keepAliveTimeout: 90s
+      keepAliveConnections: 100
+      disableChunkedEncoding: false
+      httpHostHeader: paperless.smmiri.com
+  - service: http_status:404

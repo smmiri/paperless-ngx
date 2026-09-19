@@ -1,0 +1,119 @@
+# Production stack for compiling Paperless-ngx on a Docker host and
+# publishing it at https://paperless.smmiri.com via Cloudflare Tunnel.
+#
+# From this directory:
+#   cp .env.example .env   # then fill in secrets
+#   docker compose build
+#   docker compose up -d
+#
+# The webserver is not published on the host. Cloudflare Tunnel is the
+# only public ingress.
+name: paperless
+
+services:
+  broker:
+    image: docker.io/valkey/valkey:9-alpine
+    restart: unless-stopped
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  db:
+    image: docker.io/library/postgres:18
+    restart: unless-stopped
+    volumes:
+      - pgdata:/var/lib/postgresql
+    environment:
+      POSTGRES_DB: ${PAPERLESS_DBNAME:-paperless}
+      POSTGRES_USER: ${PAPERLESS_DBUSER:-paperless}
+      POSTGRES_PASSWORD: ${PAPERLESS_DBPASS:?Set PAPERLESS_DBPASS in deploy/.env}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  gotenberg:
+    image: docker.io/gotenberg/gotenberg:8.37
+    restart: unless-stopped
+    command:
+      - gotenberg
+      - --chromium-disable-javascript=true
+      - --chromium-allow-list=file:///tmp/.*
+
+  tika:
+    image: docker.io/apache/tika:3.3.1.0
+    restart: unless-stopped
+
+  webserver:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        PNGX_TAG_VERSION: ${PNGX_TAG_VERSION:-}
+    image: paperless-ngx:smmiri
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      broker:
+        condition: service_healthy
+      gotenberg:
+        condition: service_started
+      tika:
+        condition: service_started
+    volumes:
+      - data:/usr/src/paperless/data
+      - media:/usr/src/paperless/media
+      - ./export:/usr/src/paperless/export
+      - ./consume:/usr/src/paperless/consume
+    env_file:
+      - .env
+    environment:
+      PAPERLESS_REDIS: redis://broker:6379
+      PAPERLESS_DBHOST: db
+      PAPERLESS_DBENGINE: postgresql
+      PAPERLESS_TIKA_ENABLED: "1"
+      PAPERLESS_TIKA_GOTENBERG_ENDPOINT: http://gotenberg:3000
+      PAPERLESS_TIKA_ENDPOINT: http://tika:9998
+      PAPERLESS_URL: ${PAPERLESS_URL:-https://paperless.smmiri.com}
+      PAPERLESS_USE_X_FORWARD_HOST: "true"
+      PAPERLESS_USE_X_FORWARD_PORT: "true"
+      PAPERLESS_PROXY_SSL_HEADER: '["HTTP_X_FORWARDED_PROTO", "https"]'
+      PAPERLESS_ALLAUTH_TRUSTED_CLIENT_IP_HEADER: CF-Connecting-IP
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "curl",
+          "-fsS",
+          "-L",
+          "--max-time",
+          "5",
+          "http://127.0.0.1:8000",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 90s
+
+  cloudflared:
+    image: docker.io/cloudflare/cloudflared:latest
+    restart: unless-stopped
+    depends_on:
+      webserver:
+        condition: service_healthy
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?Set CLOUDFLARE_TUNNEL_TOKEN in deploy/.env}
+      NO_AUTOUPDATE: "true"
+    command: ["tunnel", "--no-autoupdate", "run"]
+
+volumes:
+  data:
+  media:
+  pgdata:
+  redisdata:
